@@ -1,0 +1,25 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Version prüfen
+        run: |
+          V=$(node -p "require('./extension/manifest.json').version")
+          [ "v$V" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} passt nicht zu manifest.json ($V)"; exit 1; }
+      - name: Paket bauen
+        id: build
+        run: echo "zip=$(scripts/build-zip.sh)" >> "$GITHUB_OUTPUT"
+      - name: Release anlegen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "${{ steps.build.outputs.zip }}" --title "$GITHUB_REF_NAME" --generate-notes

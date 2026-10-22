@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bulk Manager für ChatGPT</title>
+<meta name="description" content="Chrome-Erweiterung: ChatGPT-Chats durchsuchen, auswählen und gesammelt archivieren, wiederherstellen oder löschen.">
+<style>
+:root{--bg:#fff;--text:#0d0d0d;--muted:#5d5d5d;--soft:#f4f4f4;--line:rgba(0,0,0,.1)}
+@media (prefers-color-scheme:dark){:root{--bg:#171717;--text:#ececec;--muted:#a3a3a3;--soft:#232323;--line:rgba(255,255,255,.12)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:960px;margin:0 auto;padding:56px 16px 80px}
+.top{display:flex;align-items:center;gap:14px}
+.top img{width:56px;height:56px}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.1;letter-spacing:-.02em;margin:28px 0 12px}
+p.lead{font-size:19px;color:var(--muted);max-width:640px;margin:0 0 28px}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+.btn{display:inline-block;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600;font-size:15px;border:1px solid var(--line);color:var(--text)}
+.btn.primary{background:var(--text);color:var(--bg);border-color:var(--text)}
+img.shot{width:100%;height:auto;border-radius:14px;margin-top:40px;border:1px solid var(--line)}
+footer{margin-top:40px;font-size:14px;color:var(--muted)}
+footer a{color:inherit}
+</style>
+</head>
+<body>
+<main>
+<div class="top"><img src="icon-128.png" alt=""><strong>Bulk Manager für ChatGPT</strong></div>
+<h1>ChatGPT-Chats gesammelt aufräumen</h1>
+<p class="lead">Durchsuchen, auswählen, archivieren, wiederherstellen oder löschen, direkt auf chatgpt.com. Läuft lokal im Browser, ohne Konto, ohne Server, ohne Tracking.</p>
+<div class="btns">
+  <a class="btn primary" href="https://github.com/aemjay/bulk-manager-for-chatgpt#installation">Installation</a>
+  <a class="btn" href="https://github.com/aemjay/bulk-manager-for-chatgpt">Quellcode</a>
+  <a class="btn" href="privacy.html">Datenschutz</a>
+</div>
+<img class="shot" src="shot-01.png" alt="Panel mit nach Datum gruppierten Chats und Auswahl">
+<footer>Kein Produkt von OpenAI. ChatGPT ist eine Marke von OpenAI. · <a href="mailto:chrome@nspm.ovh">chrome@nspm.ovh</a></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datenschutzerklärung – Bulk Manager für ChatGPT</title>
+<meta name="description" content="Datenschutzerklärung der Chrome-Erweiterung Bulk Manager für ChatGPT">
+<style>
+:root{--bg:#fff;--text:#0d0d0d;--muted:#5d5d5d;--line:rgba(0,0,0,.1);--soft:#f4f4f4;--accent:#0d0d0d}
+@media (prefers-color-scheme:dark){:root{--bg:#171717;--text:#ececec;--muted:#a3a3a3;--line:rgba(255,255,255,.12);--soft:#232323;--accent:#ececec}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 ui-sans-serif,-apple-system,system-ui,"Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:760px;margin:0 auto;padding:56px 16px 80px}
+header{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+header img{width:44px;height:44px}
+h1{font-size:30px;line-height:1.2;margin:24px 0 4px;letter-spacing:-.01em}
+h2{font-size:19px;margin:36px 0 8px}
+p,li{color:var(--text)}
+.meta{color:var(--muted);font-size:14px}
+.summary{background:var(--soft);border-radius:14px;padding:16px 20px;margin:24px 0}
+.summary p{margin:0}
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin:8px 0}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);font-size:13px}
+.wrap{overflow-x:auto}
+a{color:var(--accent)}
+nav.lang{font-size:14px;color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:56px 0}
+code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:.92em}
+</style>
+</head>
+<body>
+<main>
+<header><img src="icon-128.png" alt=""><strong>Bulk Manager für ChatGPT</strong></header>
+<nav class="lang"><a href="#de">Deutsch</a> · <a href="#en">English</a></nav>
+
+<section id="de">
+<h1>Datenschutzerklärung</h1>
+<p class="meta">Stand: 22. Oktober 2026</p>
+
+<div class="summary"><p><strong>Kurzfassung:</strong> Die Erweiterung läuft vollständig in Ihrem Browser. Sie sendet keine Daten an den Entwickler oder an Dritte. Sie kommuniziert ausschließlich mit <code>chatgpt.com</code>, um Ihre Chat-Liste anzuzeigen und die von Ihnen ausdrücklich ausgelösten Aktionen (Archivieren, Wiederherstellen, Löschen) auszuführen.</p></div>
+
+<h2>1. Anbieter und Kontakt</h2>
+<p>„Bulk Manager für ChatGPT“ ist ein privates, nicht-kommerzielles Open-Source-Projekt. Kontakt: <a href="mailto:chrome@nspm.ovh">chrome@nspm.ovh</a>. Quellcode: <a href="https://github.com/aemjay/bulk-manager-for-chatgpt">github.com/aemjay/bulk-manager-for-chatgpt</a>.</p>
+<p>Die Erweiterung ist kein Produkt von OpenAI und steht in keiner Verbindung zu OpenAI. ChatGPT ist eine Marke von OpenAI.</p>
+
+<h2>2. Welche Daten verarbeitet werden</h2>
+<div class="wrap"><table>
+<tr><th>Daten</th><th>Zweck</th><th>Ort</th><th>Dauer</th></tr>
+<tr><td>Sitzungs-Zugriffstoken von chatgpt.com (abgerufen über <code>chatgpt.com/api/auth/session</code>)</td><td>Authentifizierung der Anfragen an chatgpt.com in Ihrem Namen</td><td>Nur im Arbeitsspeicher des Tabs</td><td>Bis zum Neuladen oder Schließen des Tabs</td></tr>
+<tr><td>Geräte-Kennung von chatgpt.com (Cookie <code>oai-did</code>)</td><td>Wird wie von der Website selbst als Header an chatgpt.com mitgesendet</td><td>Nur im Arbeitsspeicher</td><td>Wie oben</td></tr>
+<tr><td>Chat-Metadaten: ID, Titel, Zeitpunkt der letzten Änderung, Kennzeichen „angeheftet“ bzw. „Projekt“</td><td>Anzeige, Suche und Auswahl im Panel</td><td>Nur im Arbeitsspeicher</td><td>Wie oben</td></tr>
+<tr><td>Eine Einstellung: die Zahl N für „Alle außer die ältesten N“</td><td>Komfort</td><td><code>chrome.storage.local</code> auf Ihrem Gerät</td><td>Bis zur Deinstallation</td></tr>
+</table></div>
+<p><strong>Nicht verarbeitet</strong> werden insbesondere: Inhalte Ihrer Chats (Nachrichten), Passwörter, Zahlungsdaten, Ihr Browserverlauf und Daten anderer Websites.</p>
+
+<h2>3. Empfänger</h2>
+<p>Daten werden ausschließlich an <code>chatgpt.com</code> (OpenAI) übertragen, weil die Aktionen dort ausgeführt werden. Schreibende Anfragen (Archivieren, Wiederherstellen, Löschen) erfolgen nur auf Ihren ausdrücklichen Klick. Für die Verarbeitung durch OpenAI gilt die <a href="https://openai.com/policies/privacy-policy/">Datenschutzerklärung von OpenAI</a>.</p>
+<p>Es gibt keine Übermittlung an den Entwickler oder an sonstige Dritte, keinen Verkauf von Daten, keine Analyse-, Tracking- oder Werbedienste und keinen nachgeladenen Code. Der Entwickler betreibt keine Server für diese Erweiterung und erhält keinerlei personenbezogene Daten.</p>
+
+<h2>4. Berechtigungen</h2>
+<ul>
+<li><strong>Zugriff auf chatgpt.com:</strong> Panel auf der Seite anzeigen, Chat-Liste abrufen, Aktionen ausführen. Andere Websites werden nicht angesprochen.</li>
+<li><strong>storage:</strong> Speichern der einen Einstellung (N) auf Ihrem Gerät.</li>
+<li><strong>scripting:</strong> Nachladen des mitgelieferten Panels in chatgpt.com-Tabs, die schon vor der Installation geöffnet waren.</li>
+</ul>
+
+<h2>5. Chrome Web Store – eingeschränkte Nutzung</h2>
+<p>Die Nutzung der Informationen entspricht der <a href="https://developer.chrome.com/docs/webstore/program-policies/policies">Chrome Web Store User Data Policy</a>, einschließlich der Anforderungen zur eingeschränkten Nutzung (Limited Use).</p>
+
+<h2>6. Änderungen</h2>
+<p>Änderungen dieser Erklärung werden auf dieser Seite und im <a href="https://github.com/aemjay/bulk-manager-for-chatgpt/commits/main/docs/privacy.html">Änderungsverlauf des Repositorys</a> veröffentlicht.</p>
+</section>
+
+<hr>
+
+<section id="en" lang="en">
+<h1>Privacy Policy</h1>
+<p class="meta">Last updated: October 22, 2026</p>
+
+<div class="summary"><p><strong>Summary:</strong> The extension runs entirely in your browser. It sends no data to the developer or any third party. It communicates only with <code>chatgpt.com</code> to display your conversation list and to perform the actions you explicitly trigger (archive, restore, delete).</p></div>
+
+<h2>1. Provider and contact</h2>
+<p>“Bulk Manager für ChatGPT” is a private, non-commercial open-source project. Contact: <a href="mailto:chrome@nspm.ovh">chrome@nspm.ovh</a>. Source code: <a href="https://github.com/aemjay/bulk-manager-for-chatgpt">github.com/aemjay/bulk-manager-for-chatgpt</a>. Not affiliated with OpenAI. ChatGPT is a trademark of OpenAI.</p>
+
+<h2>2. Data processed</h2>
+<ul>
+<li><strong>chatgpt.com session access token</strong> (from <code>chatgpt.com/api/auth/session</code>): authenticates requests to chatgpt.com on your behalf. Kept in tab memory only, until the tab is reloaded or closed.</li>
+<li><strong>chatgpt.com device identifier</strong> (cookie <code>oai-did</code>): forwarded as a header to chatgpt.com, as the site itself does. Memory only.</li>
+<li><strong>Conversation metadata</strong> (ID, title, last-updated time, pinned/project flags): display, search and selection in the panel. Memory only.</li>
+<li><strong>One setting</strong> (the number N for “all except the oldest N”): stored in <code>chrome.storage.local</code> on your device until uninstall.</li>
+</ul>
+<p>Not processed: conversation contents (messages), passwords, payment data, browsing history, data from other websites.</p>
+
+<h2>3. Recipients</h2>
+<p>Data is sent only to <code>chatgpt.com</code> (OpenAI), where the actions are performed; write requests happen only when you click. OpenAI’s <a href="https://openai.com/policies/privacy-policy/">privacy policy</a> applies to their processing. No transfer to the developer or other third parties, no sale of data, no analytics, tracking or advertising, no remote code. The developer operates no servers for this extension and receives no personal data.</p>
+
+<h2>4. Permissions</h2>
+<p><strong>chatgpt.com access</strong> – show the panel, read the conversation list, perform actions. <strong>storage</strong> – save the single setting N. <strong>scripting</strong> – inject the packaged panel into chatgpt.com tabs opened before installation.</p>
+
+<h2>5. Chrome Web Store Limited Use</h2>
+<p>The use of information complies with the <a href="https://developer.chrome.com/docs/webstore/program-policies/policies">Chrome Web Store User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h2>6. Changes</h2>
+<p>Changes are published on this page and in the repository history.</p>
+</section>
+</main>
+</body>
+</html>
