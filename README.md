@@ -56,7 +56,7 @@ Die Tests laden die echte Erweiterung in Chromium und leiten alle Anfragen an ch
 ## Release
 
 1. Version in `extension/manifest.json` erhöhen.
-2. Committen und mit `vX.Y.Z` taggen, dann pushen.
+2. Committen und pushen, dann den Tag `vX.Y.Z` setzen: per `git push origin vX.Y.Z` oder auf GitHub unter Releases → „Draft a new release“ → Tag `vX.Y.Z` neu anlegen → „Publish release“.
 3. Der Workflow „Release“ baut `bulk-manager-for-chatgpt-X.Y.Z.zip` und hängt die Datei an ein GitHub-Release.
 4. Die ZIP-Datei im [Developer Dashboard](https://chrome.google.com/webstore/devconsole) als neues Paket hochladen.
 
