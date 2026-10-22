@@ -695,7 +695,7 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
 </div>`;
       el = fbody.querySelector(".progress");
     }
-    el.querySelector(".pt").textContent = `${RUN_LABEL[r.kind][0]} …`;
+    el.querySelector(".pt").textContent = r.verifying ? "Prüfe Sitzung …" : `${RUN_LABEL[r.kind][0]} …`;
     el.querySelector(".pn").textContent = `${done.toLocaleString("de-DE")} / ${r.total.toLocaleString("de-DE")}`;
     el.querySelector(".bar i").style.width = pct + "%";
     el.querySelector(".ps").textContent = sub || "Bitte Tab geöffnet lassen.";
@@ -891,20 +891,35 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
     if (S.run || !ids.length) return;
     hideToast();
     S.confirm = null;
+    // Laufstatus SOFORT setzen (synchron), damit ein zweiter Klick keinen parallelen Lauf startet.
+    const run = (S.run = {
+      kind, total: ids.length, ok: 0, fail: 0, okIds: [], failIds: [],
+      cancel: false, aborted: false, verifying: true, start: Date.now(),
+    });
+    renderTabs();
+    syncSelection();
+    edgeBtn.classList.add("busy");
+    const endEarly = () => {
+      S.run = null;
+      edgeBtn.classList.remove("busy");
+      renderTabs();
+      syncSelection();
+    };
     // Vor jedem Schreiblauf: Sitzung frisch holen und mit dem Kontext der geladenen Liste vergleichen.
     const expect = S.ctx;
     try {
       const s = await fetchSession();
       if (!sameIdentity(s.identity, expect)) {
+        endEarly();
         return handleSessionChange("Konto oder Sitzung hat sich geändert. Nichts wurde ausgeführt, Liste neu geladen.");
       }
     } catch (e) {
+      endEarly();
       return toast("Sitzung nicht prüfbar: " + (e.message || e) + " Nichts wurde ausgeführt.");
     }
-    const run = (S.run = { kind, total: ids.length, ok: 0, fail: 0, okIds: [], failIds: [], cancel: false, aborted: false, start: Date.now() });
-    renderTabs();
-    syncSelection();
-    edgeBtn.classList.add("busy");
+    run.verifying = false;
+    run.start = Date.now();
+    renderProgress();
     const list = S.data[fromTab];
     let lastVerify = Date.now();
 

@@ -96,6 +96,9 @@ async function install(ctx, theme = "dark", opts = {}) {
   await ctx.route(/https:\/\/chatgpt\.com\/.*/, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
+    // Künstliche Latenz (z. B. LATENCY_MS=600), um langsame CI-Läufe lokal nachzustellen.
+    if (opts.latency && (url.pathname.startsWith("/api/") || url.pathname.startsWith("/backend-api/")))
+      await new Promise((r) => setTimeout(r, opts.latency));
     if (url.pathname === "/api/auth/session")
       return route.fulfill({ json: { accessToken: state.session.token, user: { id: state.session.user }, account: { id: state.session.account } } });
     const auth = (req.headers()["authorization"] || "").replace(/^Bearer /, "");

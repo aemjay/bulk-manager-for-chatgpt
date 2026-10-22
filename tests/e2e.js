@@ -14,13 +14,23 @@ const check = (cond, msg) => {
   const theme = process.argv[2] || "dark";
   const ctx = await launch();
   annotate("notice", `[${theme}] Browser ${ctx.browser() ? ctx.browser().version() : "?"}`);
-  const state = await install(ctx, theme, { rate: 9, failIds: ["c0022-aaaa-bbbb"], patchDelay: 30 });
+  const state = await install(ctx, theme, { rate: 9, failIds: ["c0022-aaaa-bbbb"], patchDelay: 30, latency: +process.env.LATENCY_MS || 0 });
   const p = await ctx.newPage();
   p.on("pageerror", (e) => { console.log("pageerror:", e.message); failed++; });
   await p.goto("https://chatgpt.com/");
   await p.waitForTimeout(800);
   const R = (sel) => p.locator("cgbm-root").locator(sel);
   const count = (sel) => R(sel).count();
+  // Wartet, bis der sichtbare Toast zum regulären Ausdruck passt (robust gegen langsame Umgebungen).
+  const waitToast = (re, timeout = 30000) =>
+    p.waitForFunction(
+      (src) => {
+        const t = document.querySelector("cgbm-root").shadowRoot.querySelector(".toast");
+        return t && !t.hidden && new RegExp(src).test(t.querySelector(".tm")?.textContent || "");
+      },
+      re.source,
+      { timeout }
+    );
 
   // Öffnen über die Toolbar-Action (Service Worker -> Content Script)
   const sw = ctx.serviceWorkers()[0] || (await ctx.waitForEvent("serviceworker"));
@@ -72,16 +82,18 @@ const check = (cond, msg) => {
   await R(".row").nth(0).click();
   await R(".row").nth(2).click({ modifiers: ["Shift"] });
   const before = await count(".row");
-  await R('[data-act="archive"]').click();
-  await R(".toast .ta").waitFor({ timeout: 20000 });
-  await p.waitForTimeout(400);
+  const archIds = await p.evaluate(() =>
+    [...document.querySelector("cgbm-root").shadowRoot.querySelectorAll(".row.sel")].map((r) => r.dataset.id));
+  const patchesFor = (ids) => state.log.filter((l) => l.kind === "patch" && ids.includes(l.id)).length;
+  await R('[data-act="archive"]').dblclick(); // Doppelklick darf keinen zweiten Lauf starten
+  await waitToast(/3 Chats archiviert/);
+  await p.waitForTimeout(300);
   check((await count(".row")) === before - 3, "3 archiviert und aus Liste entfernt");
+  check(patchesFor(archIds) < 6, `Doppelklick startet keinen zweiten Lauf (${patchesFor(archIds)} Aufrufe für 3 Chats)`);
   await R(".toast .ta").click();
-  await p.waitForFunction(() => {
-    const r = document.querySelector("cgbm-root").shadowRoot;
-    return !r.querySelector(".progress") && r.querySelectorAll(".row").length > 0;
-  }, null, { timeout: 20000 });
-  await p.waitForTimeout(500);
+  await waitToast(/wiederhergestellt/);
+  await R(".row").first().waitFor();
+  await p.waitForTimeout(300);
   check((await count(".row")) === before, "Rückgängig stellt 3 wieder her");
   const stillHidden = await p.evaluate(() => [...document.querySelectorAll("nav li")].filter((li) => li.style.display === "none").length);
   check(stillHidden === 0, "Seitenleisten-Einträge nach Rückgängig wieder sichtbar");
@@ -155,10 +167,11 @@ const check = (cond, msg) => {
   const pA = patches().length;
   state.switchSession({ token: "tok-B", user: "user-B" });
   await R('[data-act="archive"]').click();
-  await R(".toast:not([hidden])").waitFor();
-  await p.waitForTimeout(700);
+  let hinted = true;
+  await waitToast(/Nichts wurde ausgeführt/).catch(() => (hinted = false));
+  await p.waitForTimeout(300);
   check(patches().length === pA, "R01: nach Kontowechsel kein Schreibaufruf");
-  check(/Nichts wurde ausgeführt/.test(await R(".toast .tm").textContent()), "R01: Hinweis auf Kontowechsel");
+  check(hinted, "R01: Hinweis auf Kontowechsel");
   check((await sel()) === 0, "R01: Auswahl nach Kontowechsel verworfen");
   await R(".row").first().waitFor();
   check(state.log.filter((l) => l.kind === "list").pop().auth === "tok-B", "R01: Liste danach mit neuer Sitzung geladen");
@@ -166,7 +179,10 @@ const check = (cond, msg) => {
   // R01b: Neu laden holt eine frische Sitzung (Token-Rotation, gleiches Konto)
   state.switchSession({ token: "tok-B2" });
   await R('.titlebar [data-act="reload"]').click();
-  await R(".row").first().waitFor();
+  await p.waitForFunction(() => {
+    const r = document.querySelector("cgbm-root").shadowRoot;
+    return !r.querySelector(".skel") && r.querySelectorAll(".row").length > 0;
+  }, null, { timeout: 30000 });
   await p.waitForTimeout(300);
   check(state.log.filter((l) => l.kind === "list").pop().auth === "tok-B2", "R01: Neu laden nutzt frisches Token");
 
@@ -175,9 +191,9 @@ const check = (cond, msg) => {
   await R(".row").nth(1).click();
   state.switchAfterPatches = { n: 1, to: { token: "tok-B3" }, revokeOld: true };
   await R('[data-act="archive"]').click();
-  await R(".toast .ta").waitFor({ timeout: 20000 });
-  await p.waitForTimeout(300);
-  check(/2 Chats archiviert/.test(await R(".toast .tm").textContent()), "R01: Token-Rotation im Lauf, beide archiviert");
+  let rotated = true;
+  await waitToast(/2 Chats archiviert/).catch(() => (rotated = false));
+  check(rotated, "R01: Token-Rotation im Lauf, beide archiviert");
   check(patches().pop().auth === "tok-B3", "R01: Wiederholung mit rotiertem Token derselben Identität");
   await R(".toast .tx").click();
 
@@ -186,7 +202,7 @@ const check = (cond, msg) => {
   await R(".row").nth(2).click({ modifiers: ["Shift"] });
   state.switchAfterPatches = { n: 1, to: { token: "tok-C", user: "user-C" }, revokeOld: true };
   await R('[data-act="archive"]').click();
-  await p.waitForFunction(() => /abgebrochen/.test(document.querySelector("cgbm-root").shadowRoot.querySelector(".toast .tm")?.textContent || ""), null, { timeout: 20000 });
+  await waitToast(/abgebrochen/);
   check(!patches().some((l) => l.auth === "tok-C"), "R01: kein Schreibaufruf mit dem Token des neuen Kontos");
   await R(".row").first().waitFor();
   check((await sel()) === 0, "R01: Auswahl nach Abbruch verworfen");

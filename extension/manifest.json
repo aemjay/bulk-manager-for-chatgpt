@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Bulk Manager für ChatGPT",
   "short_name": "Bulk Manager",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Chats in ChatGPT durchsuchen, auswählen und gesammelt archivieren, wiederherstellen oder löschen.",
   "homepage_url": "https://github.com/aemjay/bulk-manager-for-chatgpt",
   "icons": {
