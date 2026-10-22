@@ -10,7 +10,8 @@
   const API = ORIGIN + "/backend-api";
   const DAY = 864e5;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  let token = null;
+  // Aktuelle Sitzung: Token plus stabile Identität (Nutzer + Konto). Wird nie persistiert.
+  let session = null;
 
   class HttpError extends Error {
     constructor(status, retryAfter) {
@@ -20,31 +21,49 @@
     }
   }
 
-  async function getToken() {
-    if (token) return token;
-    const r = await fetch(ORIGIN + "/api/auth/session", { credentials: "include" });
+  class SessionChanged extends Error {
+    constructor() {
+      super("Konto oder Sitzung hat sich geändert.");
+      this.sessionChanged = true;
+    }
+  }
+
+  // Liest die Sitzung immer frisch vom Server. Identität = Nutzer-ID + Konto-ID; fehlen beide,
+  // dient das Token selbst als Identität (dann gilt jeder Tokenwechsel als Sitzungswechsel).
+  async function fetchSession() {
+    session = null;
+    const r = await fetch(ORIGIN + "/api/auth/session", { credentials: "include", cache: "no-store" });
     if (!r.ok) throw new Error(`Sitzung nicht lesbar (HTTP ${r.status}).`);
     const j = await r.json().catch(() => ({}));
     if (!j.accessToken) throw new Error("Nicht angemeldet. Bitte ChatGPT neu laden.");
-    return (token = j.accessToken);
+    const uid = (j.user && (j.user.id || j.user.email)) || "";
+    const acc = (j.account && (j.account.id || j.account.account_id)) || "";
+    return (session = { token: j.accessToken, identity: uid ? `u:${uid}|a:${acc}` : `t:${j.accessToken}` });
   }
+  const getSession = () => session || fetchSession();
+  const sameIdentity = (a, b) => !!a && !!b && a === b;
 
   function deviceId() {
     const m = document.cookie.match(/(?:^|; )oai-did=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : null;
   }
 
-  async function api(path, opts = {}, retried = false) {
+  // expect: Identität, unter der die Anfrage laufen MUSS (für Schreibaufrufe). Passt die aktuelle
+  // Sitzung nicht, wird gar nicht erst gesendet. Nach 401 wird nur bei gleicher Identität wiederholt.
+  async function api(path, opts = {}, { expect = null, retried = false } = {}) {
+    const s = await getSession();
+    if (expect && !sameIdentity(s.identity, expect)) throw new SessionChanged();
     const headers = {
-      Authorization: "Bearer " + (await getToken()),
+      Authorization: "Bearer " + s.token,
       "Content-Type": "application/json",
     };
     const did = deviceId();
     if (did) headers["oai-device-id"] = did;
     const r = await fetch(API + path, { credentials: "include", ...opts, headers });
     if (r.status === 401 && !retried) {
-      token = null;
-      return api(path, opts, true);
+      const fresh = await fetchSession();
+      if (!sameIdentity(fresh.identity, s.identity)) throw new SessionChanged();
+      return api(path, opts, { expect, retried: true });
     }
     if (!r.ok) {
       const ra = parseFloat(r.headers.get("retry-after"));
@@ -56,13 +75,14 @@
   // Adaptive Drosselung: wird bei 429 langsamer, erholt sich bei Erfolg.
   const pacer = { delay: 300, min: 300, max: 8000 };
 
-  async function patchConversation(id, body) {
+  async function patchConversation(id, body, expect) {
     for (let attempt = 0; ; attempt++) {
       try {
-        await api(`/conversation/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+        await api(`/conversation/${id}`, { method: "PATCH", body: JSON.stringify(body) }, { expect });
         pacer.delay = Math.max(pacer.min, pacer.delay * 0.85);
         return;
       } catch (e) {
+        if (e.sessionChanged) throw e;
         const retriable = !e.status || e.status === 429 || e.status >= 500;
         if (!retriable || attempt >= 4) throw e;
         if (e.status === 429) pacer.delay = Math.min(pacer.max, pacer.delay * 2);
@@ -82,13 +102,15 @@
     project: typeof it.gizmo_id === "string" && it.gizmo_id.startsWith("g-p-"),
   });
 
-  async function fetchList(archived, onProgress) {
+  async function fetchList(archived, onProgress, expect) {
     const out = [];
     const limit = 100;
     let offset = 0;
     for (;;) {
       const j = await api(
-        `/conversations?offset=${offset}&limit=${limit}&order=updated&is_archived=${archived}`
+        `/conversations?offset=${offset}&limit=${limit}&order=updated&is_archived=${archived}`,
+        {},
+        { expect }
       );
       const items = (j && j.items) || [];
       out.push(...items);
@@ -143,11 +165,8 @@
     return `${Math.round(s / 60)} min`;
   }
 
-  // Bei Sammelauswahl werden angeheftete Chats übersprungen (manuell weiterhin wählbar).
-  const bulkPool = (items) => {
-    const p = items.filter((i) => !i.pinned);
-    return p.length ? p : items;
-  };
+  // Sammelauswahl wählt nie angeheftete Chats hinzu (manuell bleiben sie wählbar und abwählbar).
+  const unpinned = (items) => items.filter((i) => !i.pinned);
 
   const nativeHidden = new Map(); // id -> [Element, vorheriges display]
   function hideInNativeSidebar(id) {
@@ -464,6 +483,7 @@ kbd{font-family:inherit;font-size:11px;border:1px solid var(--border);border-bot
     run: null,
     confirm: null,
     vis: [],
+    ctx: null, // Identität, unter der die geladenen Listen und die Auswahl entstanden sind
   };
 
   storage.get("keepN", 4).then((v) => (keepIn.value = v));
@@ -567,9 +587,11 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
   }
 
   function setTri(cb, items) {
+    const pool = unpinned(items);
     const n = items.filter((i) => S.sel.has(i.id)).length;
-    cb.checked = n > 0 && n === items.length;
-    cb.indeterminate = n > 0 && n < items.length;
+    const full = pool.length > 0 && pool.every((i) => S.sel.has(i.id));
+    cb.checked = full;
+    cb.indeterminate = n > 0 && !full;
   }
 
   function syncSelection() {
@@ -707,11 +729,12 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
       action ? `<button class="ta">${esc(action.label)}</button>` : ""
     }<button class="tx" title="Schließen">${I.x}</button>`;
     toastEl.hidden = false;
-    if (action) toastEl.querySelector(".ta").onclick = () => {
+    if (action) toastEl.querySelector(".ta").onclick = (e) => {
+      if (!e.isTrusted) return;
       hideToast();
       action.fn();
     };
-    toastEl.querySelector(".tx").onclick = hideToast;
+    toastEl.querySelector(".tx").onclick = (e) => e.isTrusted && hideToast();
     toastTimer = setTimeout(hideToast, ms);
   }
   function hideToast() {
@@ -722,25 +745,65 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
   /* =========================================================
    * Daten laden
    * ======================================================= */
+  function resetData() {
+    S.data = { active: null, archived: null };
+    S.sel.clear();
+    S.errors.clear();
+    S.confirm = null;
+    S.anchorId = null;
+  }
+
+  // Frische Sitzung holen; bei anderer Identität alles Geladene verwerfen. true = gewechselt.
+  async function ensureContext() {
+    const s = await fetchSession();
+    if (S.ctx && !sameIdentity(s.identity, S.ctx)) {
+      resetData();
+      S.ctx = s.identity;
+      return true;
+    }
+    S.ctx = s.identity;
+    return false;
+  }
+
+  function handleSessionChange(msg) {
+    resetData();
+    S.ctx = session ? session.identity : null;
+    render();
+    toast(msg, null, 10000);
+    load(S.tab);
+  }
+
   async function load(tab = S.tab) {
     if (S.loading[tab]) return;
     S.loading[tab] = true;
     S.error[tab] = null;
     S.loadMsg = "";
     if (tab === S.tab) render();
+    let changedMidLoad = false;
     try {
-      S.data[tab] = await fetchList(tab === "archived", (n, total) => {
+      if (await ensureContext()) {
+        toast("Anderes Konto erkannt. Auswahl verworfen, Liste neu geladen.", null, 8000);
+        if (tab === S.tab) render();
+      }
+      const loadCtx = S.ctx;
+      const list = await fetchList(tab === "archived", (n, total) => {
         S.loadMsg = total ? `${n.toLocaleString("de-DE")} von ${total.toLocaleString("de-DE")} geladen …` : `${n} geladen …`;
         if (tab === S.tab && !S.data[tab]) renderList();
-      });
+      }, loadCtx);
+      if (!sameIdentity(loadCtx, S.ctx)) throw new SessionChanged();
+      S.data[tab] = list;
     } catch (e) {
-      S.error[tab] = e.message || String(e);
-      if (S.data[tab]) toast("Aktualisieren fehlgeschlagen: " + S.error[tab]);
+      if (e.sessionChanged) changedMidLoad = true;
+      else {
+        S.error[tab] = e.message || String(e);
+        if (S.data[tab]) toast("Aktualisieren fehlgeschlagen: " + S.error[tab]);
+      }
     } finally {
       S.loading[tab] = false;
       if (tab === S.tab) render();
       else renderTabs();
     }
+    if (changedMidLoad) handleSessionChange("Sitzung hat sich beim Laden geändert. Liste neu geladen.");
   }
 
   function reload() {
@@ -760,9 +823,12 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
   }
 
   function toggleAll(items) {
-    const pool = bulkPool(items);
-    const allOn = pool.length && pool.every((i) => S.sel.has(i.id));
-    setSel(allOn ? items : pool, !allOn);
+    const pool = unpinned(items);
+    const anySel = items.some((i) => S.sel.has(i.id));
+    const poolFull = pool.length > 0 && pool.every((i) => S.sel.has(i.id));
+    if (poolFull || (!pool.length && anySel)) setSel(items, false);
+    else if (!pool.length) toast("Nur angeheftete Chats. Diese bitte einzeln auswählen.", null, 3500);
+    else setSel(pool, true);
     S.confirm = null;
     syncSelection();
   }
@@ -818,22 +884,49 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
     unarchive: { is_archived: false },
   };
 
+  const VERIFY_EVERY = 20; // Sitzung während langer Läufe regelmäßig frisch prüfen
+  const VERIFY_MS = 60000;
+
   async function runBatch(kind, ids, { fromTab = S.tab, undoOf = null } = {}) {
     if (S.run || !ids.length) return;
     hideToast();
     S.confirm = null;
-    const run = (S.run = { kind, total: ids.length, ok: 0, fail: 0, okIds: [], failIds: [], cancel: false, start: Date.now() });
+    // Vor jedem Schreiblauf: Sitzung frisch holen und mit dem Kontext der geladenen Liste vergleichen.
+    const expect = S.ctx;
+    try {
+      const s = await fetchSession();
+      if (!sameIdentity(s.identity, expect)) {
+        return handleSessionChange("Konto oder Sitzung hat sich geändert. Nichts wurde ausgeführt, Liste neu geladen.");
+      }
+    } catch (e) {
+      return toast("Sitzung nicht prüfbar: " + (e.message || e) + " Nichts wurde ausgeführt.");
+    }
+    const run = (S.run = { kind, total: ids.length, ok: 0, fail: 0, okIds: [], failIds: [], cancel: false, aborted: false, start: Date.now() });
     renderTabs();
     syncSelection();
     edgeBtn.classList.add("busy");
     const list = S.data[fromTab];
+    let lastVerify = Date.now();
 
-    for (const id of ids) {
+    for (const [n, id] of ids.entries()) {
       if (run.cancel) break;
+      if (n > 0 && (n % VERIFY_EVERY === 0 || Date.now() - lastVerify > VERIFY_MS)) {
+        try {
+          const s = await fetchSession();
+          lastVerify = Date.now();
+          if (!sameIdentity(s.identity, expect)) {
+            run.aborted = true;
+            break;
+          }
+        } catch {
+          run.aborted = true;
+          break;
+        }
+      }
       const row = listEl.querySelector(`.row[data-id="${CSS.escape(id)}"]`);
       row && row.classList.add("busy");
       try {
-        await patchConversation(id, BODY[kind]);
+        await patchConversation(id, BODY[kind], expect);
         run.ok++;
         run.okIds.push(id);
         S.sel.delete(id);
@@ -847,6 +940,11 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
         } else hideInNativeSidebar(id);
         renderListSoon();
       } catch (e) {
+        if (e.sessionChanged) {
+          row && row.classList.remove("busy");
+          run.aborted = true;
+          break;
+        }
         run.fail++;
         run.failIds.push(id);
         S.errors.set(id, e.status ? `Fehler ${e.status}` : e.message || "Fehler");
@@ -859,6 +957,13 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
     const canceled = run.cancel;
     S.run = null;
     edgeBtn.classList.remove("busy");
+    if (run.aborted) {
+      clearTimeout(listTimer);
+      listTimer = null;
+      return handleSessionChange(
+        `Konto oder Sitzung hat sich geändert. Lauf abgebrochen nach ${plural(run.ok, "Chat", "Chats")}, Liste neu geladen.`
+      );
+    }
     // Die jeweils andere Liste ist jetzt veraltet und wird beim nächsten Öffnen neu geladen.
     const other = fromTab === "active" ? "archived" : "active";
     if (kind !== "delete") S.data[other] = null;
@@ -900,7 +1005,14 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
     S.open = true;
     wrap.classList.add("open");
     if (!S.data[S.tab] && !S.loading[S.tab]) load(S.tab);
-    else render();
+    else {
+      render();
+      // Bereits geladene Daten nur weiterverwenden, wenn die Sitzung noch dieselbe ist.
+      if (!S.run && !S.loading[S.tab])
+        ensureContext()
+          .then((changed) => changed && (render(), toast("Anderes Konto erkannt. Liste neu geladen.", null, 8000), load(S.tab)))
+          .catch(() => {});
+    }
     setTimeout(() => searchIn.focus(), 60);
   }
   function closePanel() {
@@ -934,7 +1046,10 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
   /* =========================================================
    * Events
    * ======================================================= */
+  // Sicherheit: Seitenskripte teilen sich den DOM mit dem Panel und könnten Bedienelemente per
+  // element.click() auslösen. Zustandsänderungen und Schreibaufrufe nur bei echten Nutzerereignissen.
   root.addEventListener("click", (e) => {
+    if (!e.isTrusted) return;
     const t = e.target;
     if (!t.closest(".menuwrap")) closeMenu();
 
@@ -984,21 +1099,21 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
         S.confirm = null;
         return renderFooter();
       case "do-delete":
-        return runBatch("delete", S.confirm.ids);
+        return S.confirm && runBatch("delete", S.confirm.ids);
       case "cancel-run":
         if (S.run) S.run.cancel = true;
         return renderProgress();
     }
   });
 
-  $(".backdrop").addEventListener("click", closePanel);
+  $(".backdrop").addEventListener("click", (e) => e.isTrusted && closePanel());
 
   listEl.addEventListener("mousedown", (e) => {
     if (e.shiftKey) e.preventDefault(); // keine Textmarkierung bei Shift+Klick
   });
 
   listEl.addEventListener("click", (e) => {
-    if (S.run || e.target.closest("a.open") || e.target.closest("[data-act]")) return;
+    if (!e.isTrusted || S.run || e.target.closest("a.open") || e.target.closest("[data-act]")) return;
     const g = e.target.closest(".ghead");
     if (g) {
       const now = Date.now();
@@ -1012,6 +1127,7 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
   });
 
   listEl.addEventListener("keydown", (e) => {
+    if (!e.isTrusted) return;
     const row = e.target.closest && e.target.closest(".row");
     const rows = [...listEl.querySelectorAll(".row")];
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -1049,7 +1165,7 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
   });
 
   keepIn.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
+    if (e.isTrusted && e.key === "Enter") {
       e.preventDefault();
       storage.set("keepN", parseInt(keepIn.value, 10) || 0);
       quickSelect("keep", keepIn.value);
@@ -1057,7 +1173,7 @@ ${it.project ? `<span class="badge" title="In einem Projekt">${I.folder}</span>`
   });
 
   root.addEventListener("keydown", (e) => {
-    if (!S.open) return;
+    if (!S.open || !e.isTrusted) return;
     if (e.key === "Escape") {
       e.stopPropagation();
       if (!menuEl.hidden) return closeMenu();

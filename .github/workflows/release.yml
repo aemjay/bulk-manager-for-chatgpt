@@ -3,15 +3,23 @@ on:
   push:
     tags: ["v*"]
 permissions:
-  contents: write
+  contents: read
 jobs:
+  # Ein Release entsteht nur, wenn die E2E-Tests für genau diesen Commit grün sind.
+  test:
+    uses: ./.github/workflows/test.yml
   release:
+    needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 20
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
       - name: Version prüfen
         run: |
           V=$(node -p "require('./extension/manifest.json').version")

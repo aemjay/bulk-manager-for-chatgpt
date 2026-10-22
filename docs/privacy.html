@@ -48,6 +48,7 @@ code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:.92em}
 <div class="wrap"><table>
 <tr><th>Daten</th><th>Zweck</th><th>Ort</th><th>Dauer</th></tr>
 <tr><td>Sitzungs-Zugriffstoken von chatgpt.com (abgerufen über <code>chatgpt.com/api/auth/session</code>)</td><td>Authentifizierung der Anfragen an chatgpt.com in Ihrem Namen</td><td>Nur im Arbeitsspeicher des Tabs</td><td>Bis zum Neuladen oder Schließen des Tabs</td></tr>
+<tr><td>Nutzer- und Konto-Kennung aus derselben Sitzungsantwort</td><td>Abgleich, dass Liste, Auswahl und Aktionen zum selben Konto gehören; bei einem Konto- oder Sitzungswechsel wird alles Geladene verworfen</td><td>Nur im Arbeitsspeicher des Tabs</td><td>Wie oben</td></tr>
 <tr><td>Geräte-Kennung von chatgpt.com (Cookie <code>oai-did</code>)</td><td>Wird wie von der Website selbst als Header an chatgpt.com mitgesendet</td><td>Nur im Arbeitsspeicher</td><td>Wie oben</td></tr>
 <tr><td>Chat-Metadaten: ID, Titel, Zeitpunkt der letzten Änderung, Kennzeichen „angeheftet“ bzw. „Projekt“</td><td>Anzeige, Suche und Auswahl im Panel</td><td>Nur im Arbeitsspeicher</td><td>Wie oben</td></tr>
 <tr><td>Eine Einstellung: die Zahl N für „Alle außer die ältesten N“</td><td>Komfort</td><td><code>chrome.storage.local</code> auf Ihrem Gerät</td><td>Bis zur Deinstallation</td></tr>
@@ -86,6 +87,7 @@ code{background:var(--soft);padding:1px 5px;border-radius:5px;font-size:.92em}
 <h2>2. Data processed</h2>
 <ul>
 <li><strong>chatgpt.com session access token</strong> (from <code>chatgpt.com/api/auth/session</code>): authenticates requests to chatgpt.com on your behalf. Kept in tab memory only, until the tab is reloaded or closed.</li>
+<li><strong>User and account identifier</strong> from the same session response: ensures that the list, the selection and all actions belong to the same account; on an account or session change everything loaded is discarded. Memory only.</li>
 <li><strong>chatgpt.com device identifier</strong> (cookie <code>oai-did</code>): forwarded as a header to chatgpt.com, as the site itself does. Memory only.</li>
 <li><strong>Conversation metadata</strong> (ID, title, last-updated time, pinned/project flags): display, search and selection in the panel. Memory only.</li>
 <li><strong>One setting</strong> (the number N for “all except the oldest N”): stored in <code>chrome.storage.local</code> on your device until uninstall.</li>

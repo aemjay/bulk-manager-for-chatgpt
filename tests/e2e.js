@@ -95,6 +95,95 @@ const check = (cond, msg) => { console.log((cond ? "ok   " : "FAIL ") + msg); if
   await R(".row").nth(0).click();
   check((await count('[data-act="unarchive"]')) === 1, "Archiv-Tab bietet Wiederherstellen");
 
+  // ---------- Sicherheits-Regressionstests (Review vom 22.10.2026) ----------
+  const sel = () => count(".row.sel");
+  const patches = () => state.log.filter((l) => l.kind === "patch");
+  await R('.tab[data-tab="active"]').click();
+  await R(".list .row").first().waitFor();
+
+  // R02: Sammelauswahl darf nie angeheftete Chats hinzufügen
+  const rowsAll = await count(".row");
+  await R(".master").click();
+  check((await sel()) === rowsAll - 2, "R02: gemischte Liste – Master überspringt 2 angeheftete");
+  await R('[data-act="clear-sel"]').click();
+  await R(".search input").fill("Merkliste");
+  await p.waitForTimeout(200);
+  check((await count(".row")) === 2, "R02: Suche liefert nur angeheftete Treffer");
+  await R(".master").click();
+  check((await sel()) === 0, "R02: Master wählt keine angehefteten");
+  await R(".ghead").first().click();
+  check((await sel()) === 0, "R02: Gruppenauswahl wählt keine angehefteten");
+  await R(".row").first().focus();
+  await p.keyboard.press("Control+a");
+  check((await sel()) === 0, "R02: Strg+A wählt keine angehefteten");
+  await R(".row").first().click();
+  check((await sel()) === 1, "R02: angehefteter Chat manuell wählbar");
+  await R(".master").click();
+  check((await sel()) === 0, "R02: Master wählt manuell gewählte angeheftete wieder ab");
+  await R('[data-act="clear-q"]').click();
+  await p.waitForTimeout(150);
+
+  // H01: synthetische Ereignisse aus der Seite dürfen nichts auslösen
+  const shadow = (fn) => p.evaluate(fn); // läuft in der Hauptwelt der Seite, nicht im Content Script
+  await shadow(() => document.querySelector("cgbm-root").shadowRoot.querySelector(".row").click());
+  await p.waitForTimeout(150);
+  check((await sel()) === 0, "H01: synthetischer Klick wählt nichts aus");
+  await R(".row").first().click();
+  const pBefore = patches().length;
+  await shadow(() => {
+    const r = document.querySelector("cgbm-root").shadowRoot;
+    r.querySelector('[data-act="archive"]').click();
+    r.querySelector('[data-act="ask-delete"]').click();
+    r.querySelector(".list").dispatchEvent(new KeyboardEvent("keydown", { key: "a", ctrlKey: true, bubbles: true, composed: true }));
+  });
+  await p.waitForTimeout(800);
+  check(patches().length === pBefore, "H01: synthetische Klicks lösen keinen Schreibaufruf aus");
+  check((await count(".confirm")) === 0, "H01: synthetischer Klick öffnet keine Löschbestätigung");
+  check((await sel()) === 1, "H01: synthetische Tastatur ändert Auswahl nicht");
+  await R('[data-act="clear-sel"]').click();
+
+  // R01a: Kontowechsel ohne Neuladen, altes Token bleibt gültig (Worst Case) -> kein Schreibaufruf
+  await R(".row").nth(0).click();
+  await R(".row").nth(1).click();
+  const pA = patches().length;
+  state.switchSession({ token: "tok-B", user: "user-B" });
+  await R('[data-act="archive"]').click();
+  await R(".toast:not([hidden])").waitFor();
+  await p.waitForTimeout(700);
+  check(patches().length === pA, "R01: nach Kontowechsel kein Schreibaufruf");
+  check(/Nichts wurde ausgeführt/.test(await R(".toast .tm").textContent()), "R01: Hinweis auf Kontowechsel");
+  check((await sel()) === 0, "R01: Auswahl nach Kontowechsel verworfen");
+  await R(".row").first().waitFor();
+  check(state.log.filter((l) => l.kind === "list").pop().auth === "tok-B", "R01: Liste danach mit neuer Sitzung geladen");
+
+  // R01b: Neu laden holt eine frische Sitzung (Token-Rotation, gleiches Konto)
+  state.switchSession({ token: "tok-B2" });
+  await R('.titlebar [data-act="reload"]').click();
+  await R(".row").first().waitFor();
+  await p.waitForTimeout(300);
+  check(state.log.filter((l) => l.kind === "list").pop().auth === "tok-B2", "R01: Neu laden nutzt frisches Token");
+
+  // R01c: Token läuft mitten im Lauf ab, gleiches Konto -> Wiederholung mit neuem Token erlaubt
+  await R(".row").nth(0).click();
+  await R(".row").nth(1).click();
+  state.switchAfterPatches = { n: 1, to: { token: "tok-B3" }, revokeOld: true };
+  await R('[data-act="archive"]').click();
+  await R(".toast .ta").waitFor({ timeout: 20000 });
+  await p.waitForTimeout(300);
+  check(/2 Chats archiviert/.test(await R(".toast .tm").textContent()), "R01: Token-Rotation im Lauf, beide archiviert");
+  check(patches().pop().auth === "tok-B3", "R01: Wiederholung mit rotiertem Token derselben Identität");
+  await R(".toast .tx").click();
+
+  // R01d: Kontowechsel mitten im Lauf (altes Token widerrufen) -> Abbruch, nichts unter neuem Konto
+  await R(".row").nth(0).click();
+  await R(".row").nth(2).click({ modifiers: ["Shift"] });
+  state.switchAfterPatches = { n: 1, to: { token: "tok-C", user: "user-C" }, revokeOld: true };
+  await R('[data-act="archive"]').click();
+  await p.waitForFunction(() => /abgebrochen/.test(document.querySelector("cgbm-root").shadowRoot.querySelector(".toast .tm")?.textContent || ""), null, { timeout: 20000 });
+  check(!patches().some((l) => l.auth === "tok-C"), "R01: kein Schreibaufruf mit dem Token des neuen Kontos");
+  await R(".row").first().waitFor();
+  check((await sel()) === 0, "R01: Auswahl nach Abbruch verworfen");
+
   await ctx.close();
   console.log(failed ? `\n${failed} Fehler` : "\nAlle Tests bestanden");
   process.exit(failed ? 1 : 0);

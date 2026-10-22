@@ -62,6 +62,15 @@ Die Tests laden die echte Erweiterung in Chromium und leiten alle Anfragen an ch
 
 Lokal geht es auch: `scripts/build-zip.sh`.
 
+## Sicherheit
+
+- Listen, Auswahl und Schreibaufrufe sind an die Identität der ChatGPT-Sitzung gebunden (Nutzer + Konto). Vor jedem Lauf, regelmäßig währenddessen und nach jedem HTTP 401 wird die Sitzung frisch geprüft; bei einem Wechsel wird abgebrochen und alles verworfen.
+- Zustandsänderungen und Schreibaufrufe reagieren nur auf echte Nutzerereignisse (`isTrusted`), nicht auf von Seitenskripten ausgelöste Klicks.
+- Sammelauswahl fügt nie angeheftete Chats hinzu.
+- Releases entstehen nur nach grünen E2E-Tests desselben Commits; Actions sind auf Commit-SHAs gepinnt, Testabhängigkeiten über `package-lock.json` fixiert.
+
+Sicherheitsprobleme bitte an chrome@nspm.ovh melden.
+
 ## Hinweise
 
 - Die Erweiterung nutzt die Web-Schnittstellen von chatgpt.com. Diese sind nicht offiziell dokumentiert und können sich ändern.

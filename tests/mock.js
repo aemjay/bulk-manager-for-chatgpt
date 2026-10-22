@@ -52,12 +52,20 @@ function build(dataset) {
     active[10].is_starred = true; active[18].gizmo_id = "g-p-1"; active[4].gizmo_id = "g-p-1";
   } else {
     active[3].is_starred = true; active[12].is_starred = true;
+    active[3].title = "Merkliste Steuer 3"; active[12].title = "Merkliste Urlaub 12"; // nur angeheftete Treffer
     active[5].gizmo_id = "g-p-123"; active[40].gizmo_id = "g-p-123";
     active[2].title = "Sehr langer Titel über das Mail-Adress-Konzept, Weiterleitungen und CNAMEs im Konzern mit <Sonderzeichen> & Co.";
     active[7].title = "";
   }
   for (let i = 0; i < 12; i++) archived.push(mk(500 + i, now - (i * 9 + 2) * DAY, { is_archived: true }));
-  return { active, archived, deleted: new Set() };
+  return {
+    active, archived, deleted: new Set(),
+    // Sitzungssimulation: aktuelle Sitzung, gültige Tokens, Protokoll aller API-Aufrufe
+    session: { token: "tok", user: "user-A", account: "acc-1" },
+    validTokens: new Set(["tok"]),
+    log: [],
+    switchAfterPatches: null, // { n: nach n weiteren PATCHs wechseln, to: {token,user,account}, revokeOld }
+  };
 }
 
 function page(theme, state) {
@@ -72,6 +80,12 @@ main{flex:1}</style></head><body><nav><ul>${links}</ul></nav><main></main></body
 
 async function install(ctx, theme = "dark", opts = {}) {
   const state = build(opts.dataset);
+  // Sitzung wechseln (z. B. anderes Konto oder Token-Rotation); revokeOld macht alte Tokens ungültig.
+  state.switchSession = (to, { revokeOld = false } = {}) => {
+    if (revokeOld) state.validTokens.clear();
+    state.session = { ...state.session, ...to };
+    state.validTokens.add(state.session.token);
+  };
   const fail429 = new Set();
   let patchCount = 0;
   const list = (arch, offset, limit) => {
@@ -82,15 +96,23 @@ async function install(ctx, theme = "dark", opts = {}) {
   await ctx.route(/https:\/\/chatgpt\.com\/.*/, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
-    if (url.pathname === "/api/auth/session") return route.fulfill({ json: { accessToken: "tok" } });
-    if (url.pathname === "/backend-api/conversations")
+    if (url.pathname === "/api/auth/session")
+      return route.fulfill({ json: { accessToken: state.session.token, user: { id: state.session.user }, account: { id: state.session.account } } });
+    const auth = (req.headers()["authorization"] || "").replace(/^Bearer /, "");
+    if (url.pathname === "/backend-api/conversations") {
+      state.log.push({ kind: "list", auth });
+      if (!state.validTokens.has(auth)) return route.fulfill({ status: 401, body: "" });
       return route.fulfill({ json: list(url.searchParams.get("is_archived") === "true", +url.searchParams.get("offset"), +url.searchParams.get("limit")) });
+    }
     const m = url.pathname.match(/^\/backend-api\/conversation\/(.+)$/);
     if (m && req.method() === "PATCH") {
-      if (req.headers()["authorization"] !== "Bearer tok") return route.fulfill({ status: 401, body: "" });
       const id = m[1];
+      state.log.push({ kind: "patch", id, auth });
+      if (!state.validTokens.has(auth)) return route.fulfill({ status: 401, body: "" });
       const body = JSON.parse(req.postData() || "{}");
       patchCount++;
+      const sw = state.switchAfterPatches;
+      if (sw && --sw.n <= 0) { state.switchAfterPatches = null; state.switchSession(sw.to, { revokeOld: sw.revokeOld }); }
       if (opts.failIds && opts.failIds.includes(id)) return route.fulfill({ status: 404, json: { detail: "not found" } });
       if (opts.rate && patchCount % opts.rate === 0 && !fail429.has(id)) {
         fail429.add(id);
