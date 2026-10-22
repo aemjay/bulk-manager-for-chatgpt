@@ -2,11 +2,18 @@
 const { install, launch } = require("./mock");
 
 let failed = 0;
-const check = (cond, msg) => { console.log((cond ? "ok   " : "FAIL ") + msg); if (!cond) failed++; };
+// In GitHub Actions zusätzlich als Annotation ausgeben: Annotationen sind ohne Anmeldung lesbar.
+const GHA = !!process.env.GITHUB_ACTIONS;
+const annotate = (level, msg) => GHA && console.log(`::${level}::${String(msg).replace(/\r?\n/g, " ").slice(0, 900)}`);
+const check = (cond, msg) => {
+  console.log((cond ? "ok   " : "FAIL ") + msg);
+  if (!cond) { failed++; annotate("error", `[${process.argv[2] || "dark"}] FAIL ${msg}`); }
+};
 
 (async () => {
   const theme = process.argv[2] || "dark";
   const ctx = await launch();
+  annotate("notice", `[${theme}] Browser ${ctx.browser() ? ctx.browser().version() : "?"}`);
   const state = await install(ctx, theme, { rate: 9, failIds: ["c0022-aaaa-bbbb"], patchDelay: 30 });
   const p = await ctx.newPage();
   p.on("pageerror", (e) => { console.log("pageerror:", e.message); failed++; });
@@ -187,4 +194,8 @@ const check = (cond, msg) => { console.log((cond ? "ok   " : "FAIL ") + msg); if
   await ctx.close();
   console.log(failed ? `\n${failed} Fehler` : "\nAlle Tests bestanden");
   process.exit(failed ? 1 : 0);
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  console.error(e);
+  annotate("error", `[${process.argv[2] || "dark"}] Abbruch: ${e && e.message}`);
+  process.exit(1);
+});
